@@ -1,0 +1,154 @@
+#!/usr/bin/perl -Tw
+#
+# Author:	Paul Gear
+# Created:	2010-06-04
+# Modified:	2010-12-03
+# Description:
+# - Parses syslog lines like this into statistics:
+#	Jun  4 22:57:58 linserv dovecot: POP3(accounts): Disconnected: Logged out top=0/0, retr=1/2454, del=1/1, size=2437
+#	Nov 14 22:06:55 linserv dovecot: imap-login: Login: user=<george>, method=PLAIN, rip=::ffff:1.2.3.4, lip=::ffff:192.168.1.1
+# - Reports overall size usage of each user's Maildir.
+#
+
+use strict;
+
+my ($connections, %users, %messages, %sizes);
+my ($imapconns, %imapusers, %imapmethods, %imapips);
+
+if ($#ARGV < 0) {
+	push @ARGV, "/var/log/maillog";
+}
+
+my $i = 0;
+my $start;
+
+$connections = 0;
+$imapconns = 0;
+
+while (<>) {
+	# find the date at which the log begins
+	if ($i == 0) {
+		($start) = /^(\S+\s+\d+\s+[\d:]+)\s/;
+	}
+	++$i;
+
+	if (/dovecot: POP3.*: Disconnected:/) {
+
+		my ($user, $retr, $size) = /dovecot: POP3\((.*)\): Disconnected: Logged out top=.* retr=(\d+)\/\d+, del=\d+\/\d+, size=(\d+)/;
+
+		++$connections;
+		++$users{$user};
+		$messages{$user} += $retr;
+		$sizes{$user} += $size;
+
+		next;
+	}
+	if (/imap-login: Login: user=/) {
+
+		my ($user, $method, $remoteip) = /dovecot: imap-login: Login: user=<(\S+)>, method=(\S+), rip=(?:::ffff:)?([\d\.]+), lip=/;
+
+		++$imapconns;
+		++$imapusers{$user};
+		++$imapmethods{$method};
+		++$imapips{$remoteip};
+
+		next;
+	}
+
+}
+
+#####
+# report POP logins
+#####
+
+printf "%d POP logins since %s\n\n", $connections, $start;
+my $headformat = "%-25s %12s %10s %10s %13s\n";
+my $lineformat = "%-25s %12d %10d %10d %13d\n";
+my $totalconns = 0;
+my $totalmesgs = 0;
+my $totalsize  = 0;
+if ($connections > 0) {
+	printf $headformat, "User", "Connections", "Messages", "Size (Kb)", "Average (Kb)";
+	printf $headformat, "----", "-----------", "--------", "---------", "------------";
+	my @users = keys %users;
+	for my $user (sort { $users{$b} <=> $users{$a} } @users) {
+		printf $lineformat, $user, $users{$user}, $messages{$user}, $sizes{$user} / 1024,
+			$messages{$user} > 0 ? $sizes{$user} / 1024 / $messages{$user} : -1;
+		$totalconns += $users{$user};
+		$totalmesgs += $messages{$user};
+		$totalsize  += $sizes{$user};
+	}
+	printf $headformat, "----", "-----------", "--------", "---------", "------------";
+	printf $lineformat, "TOTAL: " . @users, $totalconns, $totalmesgs, $totalsize,
+		$totalmesgs > 0 ? $totalsize / 1024 / $totalmesgs : -1;
+}
+
+#####
+# report IMAP logins
+#####
+
+printf "\n%d IMAP logins since %s\n\n", $imapconns, $start;
+
+$headformat = "%-25s %16s\n";
+$lineformat = "%-25s %16d\n";
+$totalconns = 0;
+if ($imapconns > 0) {
+	printf $headformat, "User", "IMAP Connections";
+	printf $headformat, "----", "----------------";
+	for my $user (sort { $imapusers{$b} <=> $imapusers{$a} } keys %imapusers) {
+		printf $lineformat, $user, $imapusers{$user};
+		$totalconns += $imapusers{$user};
+	}
+	printf $headformat, "----", "----------------";
+	printf $lineformat, "TOTALS: " . keys %imapusers, $totalconns;
+}
+
+printf "\n";
+$headformat = "%-25s %16s\n";
+$lineformat = "%-25s %16d\n";
+$totalconns = 0;
+if ($imapconns > 0) {
+	printf $headformat, "IP Address", "IMAP Connections";
+	printf $headformat, "----------", "----------------";
+	for my $ip (sort { $imapips{$b} <=> $imapips{$a} } keys %imapips) {
+		printf $lineformat, $ip, $imapips{$ip};
+		$totalconns += $imapips{$ip};
+	}
+	printf $headformat, "----------", "----------------";
+	printf $lineformat, "TOTALS: " . keys %imapips, $totalconns;
+}
+
+#####
+# Get the top maildir sizes
+#####
+
+# Reset PATH to keep perl happy in taint mode
+$ENV{"PATH"} = "/usr/bin:/bin:/usr/sbin:/sbin";
+
+open PIPE, "cd /home; du -ms Maildir/* */Maildir 2>/dev/null | sort -nr |" ||
+	die "Cannot open pipe: $!";
+
+printf "\n";
+$headformat = "%-24s %17s\n";
+$lineformat = "%-24s %17d\n";
+
+printf $headformat, "User", "Mailbox size (MB)";
+printf $headformat, "----", "-----------------";
+
+$totalsize = 0;
+while (<PIPE>) {
+	chomp;
+	my ($size, $dir) = split(/\s+/, $_, 2);
+	my $user = $dir;
+	$user =~ s/\/?Maildir\/?//;
+	printf $lineformat, $user, $size;
+	$totalsize += $size;
+}
+# line below commented due to error
+#printf $lineformat, "-----", "-----------------";
+printf $lineformat, "TOTAL", $totalsize;
+close PIPE || warn "Cannot close pipe: $!";
+
+printf "\n";
+system ("du -hx  /home/Maildir/ --max-depth=0");
+

@@ -1,0 +1,45 @@
+// Managed by puppet on <%= servername -%> - do not edit here!
+zone "<%= zone %>" {
+	type <%= zonetype %>;
+<% if zone_notify.length > 0 then -%>
+	notify <%= zone_notify %>;
+<% end -%>
+<% if zonefile.length > 0 then -%>
+	file "<%= zonefile %>";
+<% end -%>
+<% if masters.length > 0 then -%>
+	masters {
+<% masters.each do |ip| -%>
+		<%= ip %>;
+<% end -%>
+	};
+<% end -%>
+<% if forwarders.length > 0 then -%>
+	forwarders {
+<% forwarders.each do |ip| -%>
+		<%= ip %>;
+<% end -%>
+	};
+<% end -%>
+<% if allow_notify.length > 0 then -%>
+	allow-notify {
+<% allow_notify.each do |an| -%>
+		<%= an %>;
+<% end -%>
+	};
+<% end -%>
+<% if notify_source.length > 0 then -%>
+	notify-source <%= notify_source %>;
+<% end -%>
+<% if notify_source_v6.length > 0 then -%>
+	notify-source-v6 <%= notify_source_v6 %>;
+<% end -%>
+<% if allow_transfer.length > 0 then -%>
+	allow-transfer {
+<% allow_transfer.each do |at| -%>
+		<%= at %>;
+<% end -%>
+	};
+<% end -%>
+};
+

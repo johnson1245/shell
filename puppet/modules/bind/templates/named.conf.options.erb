@@ -1,0 +1,101 @@
+// Managed by puppet on <%= servername -%> - do not edit here!
+// named.conf.options to suit both Debian/Ubuntu and CentOS
+
+options {
+<% if operatingsystem == "CentOS" then -%>
+	directory "/var/named";
+	dump-file "/var/named/data/cache_dump.db";
+	<% if statistics_file.length > 0 then -%>
+		statistics-file "<%= statistics_file %>";
+	<% else -%>
+		statistics-file "/var/named/data/named_stats.txt";
+	<% end -%>
+<% else -%>
+        directory "<%= binddir %>";
+	auth-nxdomain no;    # conform to RFC1035
+	<% if statistics_file.length > 0 then -%>
+		statistics-file "<%= statistics_file %>";
+	<% end -%>
+<% end -%>
+<% if check_names.length > 0 then
+check_names.each do |cn| -%>
+	check-names <%= cn %>;
+<% end
+end -%>
+<% if forward.length > 0 and forwarder_list.length > 0 then -%>
+	forward <%= forward %>;
+<% end -%>
+<% if forwarder_set.length > 0 then -%>
+	# <%= forwarder_set %>
+<% end -%>
+<% if forwarder_list.length > 0 then -%>
+	forwarders {
+<% forwarder_list.each do |fwd| -%>
+		<%= fwd %>;
+<% end -%>
+	};
+<% end -%>
+<% if global_notify.length > 0 then -%>
+	notify <%= global_notify %>;
+<% end -%>
+<% if edns_udp_size.length > 0 then -%>
+	edns-udp-size <%= edns_udp_size %>;
+<% end -%>
+<% if listen_on.length > 0 then -%>
+	listen-on {
+<% listen_on.each do |lo| -%>
+		<%= lo %>;
+<% end -%>
+	};
+<% end -%>
+<% if listen_on_v6.length > 0 then -%>
+	listen-on-v6 {
+<% listen_on_v6.each do |lo| -%>
+		<%= lo %>;
+<% end -%>
+	};
+<% end -%>
+<% if max_udp_size.length > 0 then -%>
+	max-udp-size <%= max_udp_size %>;
+<% end -%>
+<% if query_source.length > 0 then -%>
+	query-source <%= query_source %>;
+<% end -%>
+<% if query_source_v6.length > 0 then -%>
+	query-source-v6 <%= query_source_v6 %>;
+<% end -%>
+<% if recursion.length > 0 then -%>
+	recursion <%= recursion %>;
+<% end -%>
+<% if version.length > 0 then -%>
+	version "<%= version %>";
+<% end -%>
+<% if options_file.length > 0 then -%>
+	include "<%= options_file %>";
+<% end -%>
+<% if allow_query.length > 0 then -%>
+	allow-query {
+<% allow_query.each do |aq| -%>
+		<%= aq %>;
+<% end -%>
+	};
+<% end -%>
+<% if allow_query_cache.length > 0 then -%>
+	allow-query-cache {
+<% allow_query_cache.each do |aqc| -%>
+		<%= aqc %>;
+<% end -%>
+	};
+<% end -%>
+<% if allow_recursion.length > 0 then -%>
+	allow-recursion {
+<% allow_recursion.each do |ar| -%>
+		<%= ar %>;
+<% end -%>
+	};
+<% end -%>
+<% if zone_statistics.length > 0 then -%>
+	zone-statistics <%= zone_statistics %>;
+<% end -%>
+};
+

@@ -1,0 +1,23 @@
+# fail2ban jail fragment file managed by puppet
+[<%= jailname %>]
+<%
+# Author:	Paul Gear <puppet@libertysys.com.au>
+# License:	GPLv3
+# Copyright:	(c) 2010 Gear Consulting Pty Ltd <http://libertysys.com.au/>
+[
+    'action',
+    'banaction',
+    'bantime',
+    'enabled',
+    'filter',
+    'findtime',
+    'ignoreip',
+    'logpath',
+    'maxretry',
+    'port',
+].each do |v|
+unless scope.lookupvar(v) == nil or scope.lookupvar(v).empty? then -%>
+<%= "#{v}=#{scope.lookupvar(v)}" %>
+<% end
+end -%>
+

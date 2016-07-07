@@ -1,0 +1,22 @@
+<% require '/etc/puppet/include/puppetutils.rb' -%>
+<%= include_header( "SpamAssassin local configuration file" ) -%>
+
+required_hits 5
+report_safe 0
+rewrite_header Subject [*SPAM*]
+
+<% trusted_networks.each do |net| -%>
+trusted_networks <%= net %>
+<% end -%>
+
+<% if whitelist_from.length > 0 then -%>
+# http://wiki.apache.org/spamassassin/ManualWhitelist
+
+# Whitelist and blacklist addresses are file-glob-style patterns, so friend@somewhere.com, *@isp.com, or *.domain.net will all work.
+
+<% whitelist_from.each do |wlf| -%>
+whitelist_from <%= wlf %>
+<% end
+end -%>
+
+<%= include_file(fqdn + "-local.cf") -%>

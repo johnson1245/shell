@@ -1,0 +1,14 @@
+#!/usr/bin/perl -wT
+
+# turn off buffering on output
+$|=1;
+
+while (<>) {
+	# turn on strict searching by default
+	s!(http://\S*google\S*)safe=(images|off)!$1safe=strict!;
+	if (/google/ && !/safe=strict/) {
+	    s!(http://\S*google\S*)\?(\S+)!$1\?$2&safe=strict!;
+	}
+
+        print;
+}

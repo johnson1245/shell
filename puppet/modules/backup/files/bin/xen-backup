@@ -1,0 +1,128 @@
+#!/bin/bash
+#
+# Author:	Paul Gear
+# Description:	Back up all VMs on the current host
+#		Designed for use with VMs created by xen-tools.
+#
+
+#set -e
+set -u
+
+PATH="/usr/sbin:/sbin:/usr/bin:/bin:/usr/local/bin:$PATH"
+BACKUPVOL="/media/vmbackup"
+XENDIR="/var/lib/xen/images"
+SLEEP=5
+DIVISOR=4
+XEN=xl
+
+if [ "$#" -gt 0 ]; then
+	DOMAINS="$@"
+else
+	DOMAINS=`$XEN list | awk '$1 == "Name" || $1 == "Domain-0" {next} $5 ~ /^(r-|-b|--)/ {print $1}'`
+fi
+
+log()
+{
+	echo "`date` " "$@"
+}
+
+islv()
+{
+	lvdisplay "$@" >/dev/null 2>&1
+}
+
+find_vg()
+{
+	lvs | awk -vLV=$1 '$1 == LV {print $2}'
+}
+
+ismounted()
+{
+	mount | awk -v DEV="$@" 'BEGIN { FOUND=1 } $1 == DEV || $3 == DEV { FOUND=0 } END { exit FOUND }'
+}
+
+# Ignore LVM warnings, which happen when run from cron.daily on Debian squeeze
+# (and perhaps elsewhere as well).
+# See http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=558712 for further
+# information.
+export LVM_SUPPRESS_FD_WARNINGS=1
+
+# save lvs output
+TMPDIR=`mktemp -d`
+LVS="lvs --units m"
+$LVS > $TMPDIR/before
+
+SNAPSHOT_LIST=""
+for domain in $DOMAINS; do
+	starttime=$(date +%s)
+	$XEN pause $domain
+
+	sleep $SLEEP
+
+	# wait for domain to pause
+	tries=0
+	while [ -z "`$XEN list $domain | awk '$5 ~ /^--p/ {print $1}'`" ]; do
+		log "Waiting for pause"
+		sleep $SLEEP
+		(( tries++ ))
+		if [ $tries -gt 9 ]; then
+			log "Abort waiting for $domain (after $tries tries at $SLEEP second intervals)"
+			$XEN unpause $domain
+			continue
+		fi
+	done
+
+	# check what sort of backup to do
+	LV_SHORT="$domain-disk"
+	VG=`find_vg $LV_SHORT`
+	LV="/dev/$VG/$LV_SHORT"
+	if islv "$LV"; then
+		# snapshot is a portion of the original LV size - this may need tuning above
+		LVSIZE=`lvs -o lv_name,lv_size --units m $VG 2>/dev/null|awk -v LV=$LV_SHORT '$1 == LV {print $2}'| cut -d. -f1`
+		SNAPSIZE=$LVSIZE
+		(( SNAPSIZE /= DIVISOR ))
+
+		sleep $SLEEP
+
+		# create LVM snapshot configuration file and back up using that
+		TMPFILE=`mktemp`
+		cat > $TMPFILE <<EOF
+ORIGINAL_LV=$LV
+SNAPSHOT_LV=$LV-snap
+SNAPSHOT_SIZE=$SNAPSIZE
+EOF
+		lvm-snapshot --conf $TMPFILE --no-mount
+		SNAPSHOT_LIST="$SNAPSHOT_LIST $LV-snap"
+	else
+		# file-based backup
+		rsync -SHax $XENDIR/$domain/ $XENDIR/$domain.bak/
+	fi
+
+	$XEN unpause $domain
+	finishtime=$(date +%s)
+	(( backuptime = finishtime - starttime ))
+	log "Backed up $domain in $backuptime seconds"
+done
+
+# save snapshots to external media
+if ismounted $BACKUPVOL; then
+	log "Backing up snapshots to $BACKUPVOL"
+	mkdir -p $BACKUPVOL/images
+	for i in $SNAPSHOT_LIST; do
+		base=`basename $i`
+		log "Starting backup of $i"
+		mv -f $BACKUPVOL/images/$base.img.gz $BACKUPVOL/images/$base.img.gz.prev || true
+		dd if=$i bs=1024k conv=noerror | gzip --fast > $BACKUPVOL/images/$base.img.gz
+	done
+	log "Finished snapshot backups to $BACKUPVOL"
+
+	for LV in $SNAPSHOT_LIST; do
+	    lvremove --force $LV
+	done
+	log "Finished removing snapshot volumes"
+fi
+
+log "Changes in LV use:"
+$LVS > $TMPDIR/after
+diff $TMPDIR/before $TMPDIR/after
+rm -rf $TMPDIR/

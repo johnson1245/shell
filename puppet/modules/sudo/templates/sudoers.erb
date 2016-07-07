@@ -1,0 +1,37 @@
+<% require '/etc/puppet/include/puppetutils.rb' -%>
+<%= include_header( "sudoers" ) -%>
+# /etc/sudoers
+#
+# This file MUST be edited with the 'visudo' command as root.
+#
+# See the man page for details on how to write a sudoers file.
+#
+
+Defaults	env_reset
+Defaults	mail_badpass
+Defaults	secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Host alias specification
+
+# User alias specification
+
+# Cmnd alias specification
+
+# User privilege specification
+<% superusers.each do |su| -%>
+<%= su %> ALL=(ALL) ALL
+<% end -%>
+<% nopasswd.each do |su| -%>
+<%= su %> ALL=(ALL) NOPASSWD:ALL
+<% end -%>
+
+# Add your local sudoers here
+
+<%= include_file(fqdn + "-sudoers") -%>
+
+# Uncomment to allow members of group sudo to not need a password
+# (Note that later entries override this, so you might need to move
+# it further down)
+# %sudo ALL=NOPASSWD: ALL
+
+#includedir /etc/sudoers.d
